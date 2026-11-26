@@ -1,7 +1,6 @@
 import { defineBoot } from '#q-app/wrappers'
 import axios from 'axios'
 
-const RENDER_API_BASE_URL = 'https://backend1-2-8gx9.onrender.com/api'
 const ACCESS_TOKEN_STORAGE_KEY = 'vimel_access_token'
 const AUTH_DEBUG_ENABLED = import.meta.env.DEV
 
@@ -103,31 +102,35 @@ if (accessTokenFromUrl) {
 // good idea to move this instance creation inside of the
 // "export default () => {}" function below (which runs individually
 // for each client)
-const inferredBaseUrl = (() => {
-  const envUrl = import.meta.env.VITE_API_BASE_URL
+// Vite inlines VITE_* at build time. Netlify (and `.env.production`) must
+// provide VITE_API_BASE_URL. A deployed host must not fall back to :8000.
+function resolveApiBaseUrl() {
+  const envUrl = String(import.meta.env.VITE_API_BASE_URL || '')
+    .trim()
+    .replace(/\/$/, '')
   if (envUrl) return envUrl
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol || ''
-    const host = window.location.hostname
-    const isMobileShell =
-      protocol === 'capacitor:' ||
-      protocol === 'ionic:' ||
-      isNativeCapacitorRuntime() ||
-      (/android/i.test(window.navigator.userAgent || '') && host === 'localhost')
-    const isLocalHost = host === 'localhost' || host === '127.0.0.1'
 
-    if (isMobileShell) {
-      return RENDER_API_BASE_URL
-    }
+  if (typeof window === 'undefined') return ''
 
-    if (isLocalHost) {
-      return `${protocol}//${host}:8000/api`
-    }
+  const protocol = window.location.protocol || 'http:'
+  const host = window.location.hostname || ''
+  const isMobileShell =
+    protocol === 'capacitor:' ||
+    protocol === 'ionic:' ||
+    isNativeCapacitorRuntime() ||
+    (/android/i.test(window.navigator.userAgent || '') && host === 'localhost')
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1'
 
+  // Browser dev without an env file talks to the local API.
+  // Native shells cannot reach that host; set VITE_API_BASE_URL for them.
+  if (isLocalHost && !isMobileShell) {
     return `${protocol}//${host}:8000/api`
   }
-  return RENDER_API_BASE_URL
-})()
+
+  return ''
+}
+
+const inferredBaseUrl = resolveApiBaseUrl()
 
 const api = axios.create({
   baseURL: inferredBaseUrl,
