@@ -1,0 +1,14 @@
+# Quasar CLI (Vite) SPA. vueRouterMode is "history", so deep links need the
+# fallback redirect below. Netlify serves real files before applying it.
+[build]
+  command = "npm run build"
+  publish = "dist/spa"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Client-side routes (/login, /app, /wizard, ...) fall back to the SPA shell.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
