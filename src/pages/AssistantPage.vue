@@ -17,7 +17,15 @@
           <div class="text-body2 q-mt-xs chat-message__content">{{ message.content }}</div>
 
           <div v-if="message.recipes?.length" class="chat-recipes q-mt-sm">
-            <q-card v-for="recipe in message.recipes" :key="recipe.id" flat bordered class="chat-recipe-card">
+            <q-card
+              v-for="recipe in message.recipes"
+              :key="recipe.id"
+              flat
+              bordered
+              clickable
+              class="chat-recipe-card"
+              @click="openRecipe(recipe)"
+            >
               <q-card-section>
                 <div class="text-subtitle2 text-weight-bold">{{ recipe.title }}</div>
                 <div class="text-caption text-grey-7 q-mt-xs">
@@ -85,19 +93,70 @@
         </div>
       </q-card-section>
     </q-card>
+
+    <RecipeDetailDialog
+      v-model="recipeDialogOpen"
+      :recipe="selectedRecipe"
+      :nutrition="selectedNutrition"
+      :loading="detailLoading"
+      :favorite="false"
+      @calculate="calculateNutrition"
+    />
   </q-page>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useQuasar } from 'quasar'
 import { useAssistantStore } from 'stores/assistant-store'
+import { useWellnessStore } from 'stores/wellness-store'
+import RecipeDetailDialog from 'components/RecipeDetailDialog.vue'
 
 const assistant = useAssistantStore()
+const wellnessStore = useWellnessStore()
+const $q = useQuasar()
 const draft = ref('')
+const recipeDialogOpen = ref(false)
+const detailLoading = ref(false)
+const selectedRecipe = ref(null)
+
+const selectedNutrition = computed(() => {
+  const id = Number(selectedRecipe.value?.id || 0)
+  if (!id) return null
+  return wellnessStore.nutritionByRecipe?.[id] || null
+})
 
 onMounted(() => {
   assistant.initWelcome()
 })
+
+async function calculateNutrition(recipe) {
+  if (!recipe?.id && !recipe?.slug) return
+  try {
+    await wellnessStore.calculateRecipeNutrition(recipe)
+    $q.notify({ type: 'positive', message: 'Nutrición calculada.' })
+  } catch {
+    $q.notify({ type: 'negative', message: 'No se pudo calcular la nutrición.' })
+  }
+}
+
+async function openRecipe(recipe) {
+  selectedRecipe.value = recipe
+  recipeDialogOpen.value = true
+
+  const hasDetail = Array.isArray(recipe?.ingredients) && recipe.ingredients.length && Array.isArray(recipe?.steps) && recipe.steps.length
+  if (!recipe?.slug || hasDetail) return
+
+  detailLoading.value = true
+  try {
+    const detail = await wellnessStore.fetchRecipeDetail(recipe.slug)
+    if (detail) selectedRecipe.value = detail
+  } catch {
+    $q.notify({ type: 'warning', message: 'No se pudieron cargar todos los detalles.' })
+  } finally {
+    detailLoading.value = false
+  }
+}
 
 function handleSend() {
   if (!draft.value.trim()) return
